@@ -1,0 +1,361 @@
+import React, { useState } from 'react';
+import { Shield, Swords, Eye, EyeOff, Trophy, Zap } from 'lucide-react';
+
+const DarkForestBattle = () => {
+  const GRID_SIZE = 5;
+  const UNITS_TO_PLACE = 3;
+  const UNITS_TO_WIN = 3;
+
+  const [gameState, setGameState] = useState('menu'); // menu, setup, playing, gameOver
+  const [playerUnits, setPlayerUnits] = useState([]);
+  const [aiUnits, setAIUnits] = useState([]);
+  const [playerAttacks, setPlayerAttacks] = useState([]);
+  const [aiAttacks, setAIAttacks] = useState([]);
+  const [playerHits, setPlayerHits] = useState(0);
+  const [aiHits, setAIHits] = useState(0);
+  const [turn, setTurn] = useState('player');
+  const [message, setMessage] = useState('');
+  const [selectedCell, setSelectedCell] = useState(null);
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  // AI birim yerleştirme
+  const placeAIUnits = () => {
+    const units = [];
+    while (units.length < UNITS_TO_PLACE) {
+      const pos = Math.floor(Math.random() * (GRID_SIZE * GRID_SIZE));
+      if (!units.includes(pos)) {
+        units.push(pos);
+      }
+    }
+    return units;
+  };
+
+  const startGame = () => {
+    setGameState('setup');
+    setPlayerUnits([]);
+    setAIUnits([]);
+    setPlayerAttacks([]);
+    setAIAttacks([]);
+    setPlayerHits(0);
+    setAIHits(0);
+    setTurn('player');
+    setMessage(`Karanlık ormanda ${UNITS_TO_PLACE} birliğini gizli konumlandır!`);
+    setSelectedCell(null);
+  };
+
+  const handleCellClick = (index) => {
+    if (gameState === 'setup') {
+      if (playerUnits.includes(index)) {
+        setPlayerUnits(playerUnits.filter(u => u !== index));
+      } else if (playerUnits.length < UNITS_TO_PLACE) {
+        setPlayerUnits([...playerUnits, index]);
+        if (playerUnits.length + 1 === UNITS_TO_PLACE) {
+          setMessage('Hazırsın! "Savaşa Başla" butonuna tıkla.');
+        }
+      }
+    } else if (gameState === 'playing' && turn === 'player') {
+      if (!playerAttacks.includes(index)) {
+        setSelectedCell(index);
+      }
+    }
+  };
+
+  const confirmAttack = () => {
+    if (selectedCell === null) return;
+    
+    const newPlayerAttacks = [...playerAttacks, selectedCell];
+    setPlayerAttacks(newPlayerAttacks);
+    
+    let newPlayerHits = playerHits;
+    if (aiUnits.includes(selectedCell)) {
+      newPlayerHits++;
+      setPlayerHits(newPlayerHits);
+      setMessage('💥 VURUŞ! Düşman birliği vurdun!');
+    } else {
+      setMessage('💨 Boş! Bu bölgede kimse yok.');
+    }
+    
+    setSelectedCell(null);
+    
+    if (newPlayerHits >= UNITS_TO_WIN) {
+      setGameState('gameOver');
+      setMessage('🎉 ZAFER! Tüm düşman birimlerini yok ettin!');
+      return;
+    }
+    
+    setTurn('ai');
+    setTimeout(() => aiTurn(newPlayerAttacks), 1500);
+  };
+
+  const aiTurn = (currentPlayerAttacks) => {
+    let aiTarget;
+    do {
+      aiTarget = Math.floor(Math.random() * (GRID_SIZE * GRID_SIZE));
+    } while (aiAttacks.includes(aiTarget));
+    
+    const newAIAttacks = [...aiAttacks, aiTarget];
+    setAIAttacks(newAIAttacks);
+    
+    let newAIHits = aiHits;
+    if (playerUnits.includes(aiTarget)) {
+      newAIHits++;
+      setAIHits(newAIHits);
+      setMessage('⚔️ Düşman saldırısı! Birliğin vuruldu!');
+    } else {
+      setMessage('🛡️ Düşman ıskaladı! Senin turun.');
+    }
+    
+    if (newAIHits >= UNITS_TO_WIN) {
+      setGameState('gameOver');
+      setMessage('💀 Yenildin! Tüm birliklerini kaybettin.');
+      return;
+    }
+    
+    setTimeout(() => {
+      setTurn('player');
+      setMessage('Sıra sende! Saldırmak için bir hücre seç.');
+    }, 1500);
+  };
+
+  const beginBattle = () => {
+    if (playerUnits.length !== UNITS_TO_PLACE) return;
+    const newAIUnits = placeAIUnits();
+    setAIUnits(newAIUnits);
+    setGameState('playing');
+    setMessage('Savaş başladı! Düşmanı bulmak için bir hücreye saldır.');
+  };
+
+  const getCellStatus = (index) => {
+    if (gameState === 'setup') {
+      return playerUnits.includes(index) ? 'player-unit' : '';
+    }
+    
+    if (gameState === 'playing' || gameState === 'gameOver') {
+      const isPlayerAttack = playerAttacks.includes(index);
+      const isAIAttack = aiAttacks.includes(index);
+      const isPlayerUnit = playerUnits.includes(index);
+      const isAIUnit = aiUnits.includes(index);
+      
+      if (isPlayerAttack && isAIUnit) return 'hit-enemy';
+      if (isPlayerAttack) return 'miss';
+      if (isAIAttack && isPlayerUnit) return 'hit-player';
+      if (isAIAttack) return 'ai-miss';
+      if (gameState === 'gameOver' && isPlayerUnit) return 'reveal-player';
+      if (gameState === 'gameOver' && isAIUnit) return 'reveal-ai';
+    }
+    
+    return '';
+  };
+
+  const renderGrid = () => {
+    return (
+      <div className="grid grid-cols-5 gap-2 mb-6">
+        {Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, index) => {
+          const status = getCellStatus(index);
+          const isSelected = selectedCell === index;
+          const canClick = (gameState === 'setup') || 
+                          (gameState === 'playing' && turn === 'player' && !playerAttacks.includes(index));
+          
+          return (
+            <button
+              key={index}
+              onClick={() => handleCellClick(index)}
+              disabled={!canClick}
+              className={`
+                w-16 h-16 rounded-lg border-2 transition-all duration-300 relative overflow-hidden
+                ${status === 'player-unit' ? 'border-blue-600 border-4' : ''}
+                ${status === 'hit-enemy' ? 'bg-red-500 border-red-600' : ''}
+                ${status === 'miss' ? 'bg-gray-400 border-gray-500' : ''}
+                ${status === 'hit-player' ? 'bg-orange-500 border-orange-600' : ''}
+                ${status === 'ai-miss' ? 'bg-gray-300 border-gray-400' : ''}
+                ${status === 'reveal-player' ? 'bg-blue-300 border-blue-400' : ''}
+                ${status === 'reveal-ai' ? 'bg-red-300 border-red-400' : ''}
+                ${!status ? 'bg-green-900 border-green-700 hover:bg-green-800' : ''}
+                ${isSelected ? 'ring-4 ring-yellow-400 scale-110' : ''}
+                ${!canClick ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
+              `}
+            >
+              {status === 'hit-enemy' && <Swords className="w-8 h-8 text-white mx-auto" />}
+              {status === 'hit-player' && <Swords className="w-8 h-8 text-white mx-auto" />}
+              {status === 'miss' && <Eye className="w-6 h-6 text-gray-600 mx-auto" />}
+              {status === 'player-unit' && (
+                <img 
+                  src="/ywoKR9uZ_400x400.jpg" 
+                  alt="Birim" 
+                  className="w-full h-full object-cover rounded-lg"
+                />
+              )}
+              {gameState === 'gameOver' && status === 'reveal-ai' && <Shield className="w-8 h-8 text-red-700 mx-auto" />}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen text-white p-8 relative overflow-hidden">
+      {/* Arka Plan Videosu */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="fixed inset-0 w-full h-full object-cover z-0"
+      >
+        <source src="https://claim.zama.org/animations/zama-og-glass.mp4" type="video/mp4" />
+      </video>
+      {/* Overlay - İçeriğin okunabilir olması için */}
+      <div className="fixed inset-0 bg-black bg-opacity-60 z-0"></div>
+      
+      <div className="max-w-4xl mx-auto relative z-10">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-5xl font-bold mb-2 text-green-400 flex items-center justify-center gap-3">
+            <Zap className="w-10 h-10" />
+            Dark Forest Battle
+          </h1>
+          <p className="text-gray-300 text-lg">Powered by Zama FHE Technology</p>
+          <button
+            onClick={() => setShowTutorial(!showTutorial)}
+            className="mt-2 text-sm text-blue-400 hover:text-blue-300 underline"
+          >
+            {showTutorial ? 'Yardımı Gizle' : 'Nasıl Oynanır?'}
+          </button>
+        </div>
+
+        {/* Tutorial */}
+        {showTutorial && (
+          <div className="bg-gray-800 bg-opacity-90 border-2 border-green-500 rounded-lg p-6 mb-6">
+            <h3 className="text-xl font-bold mb-3 text-green-400">🎮 Oyun Kuralları</h3>
+            <ul className="space-y-2 text-gray-300">
+              <li>• Karanlık ormanda 3 birim gizlice yerleştir</li>
+              <li>• Düşmanın nerede olduğunu kimse bilmiyor (FHE ile şifrelenmiş)</li>
+              <li>• Sırayla hücrelere saldır ve düşman birimlerini bulmaya çalış</li>
+              <li>• İlk 3 birimi vuran kazanır!</li>
+              <li>• 💥 Kırmızı = Vuruş | 💨 Gri = Boş</li>
+            </ul>
+          </div>
+        )}
+
+        {/* Menu Screen */}
+        {gameState === 'menu' && (
+          <div className="text-center bg-gray-800 bg-opacity-90 rounded-lg p-12 border-2 border-green-500">
+            <Shield className="w-24 h-24 mx-auto mb-6 text-green-400" />
+            <h2 className="text-3xl font-bold mb-4">Karanlık Ormana Hoş Geldin</h2>
+            <p className="text-gray-300 mb-8 max-w-md mx-auto">
+              Birimlerini gizli yerleştir. Düşmanın konumunu bilmeden savaş. 
+              Zama'nın FHE teknolojisi sayesinde hiçbir bilgi açığa çıkmaz!
+            </p>
+            <button
+              onClick={startGame}
+              className="bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-8 rounded-lg text-xl transition-all transform hover:scale-105"
+            >
+              Savaşa Başla
+            </button>
+          </div>
+        )}
+
+        {/* Game Board */}
+        {(gameState === 'setup' || gameState === 'playing' || gameState === 'gameOver') && (
+          <div className="bg-gray-800 bg-opacity-90 rounded-lg p-8 border-2 border-green-500">
+            {/* Status Bar */}
+            <div className="flex justify-between items-center mb-6">
+              <div className="text-center">
+                <p className="text-sm text-gray-400">Senin Birimler</p>
+                <p className="text-3xl font-bold text-blue-400">{UNITS_TO_PLACE - playerHits}</p>
+              </div>
+              <div className="text-center">
+                <Trophy className="w-12 h-12 mx-auto text-yellow-400 mb-2" />
+                <p className="text-sm text-gray-400">İlk {UNITS_TO_WIN} Vuruş Kazanır</p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm text-gray-400">Düşman Birimler</p>
+                <p className="text-3xl font-bold text-red-400">{UNITS_TO_PLACE - aiHits}</p>
+              </div>
+            </div>
+
+            {/* Message */}
+            <div className="bg-gray-900 rounded-lg p-4 mb-6 text-center border-2 border-gray-700">
+              <p className="text-lg font-semibold">{message}</p>
+              {gameState === 'setup' && (
+                <p className="text-sm text-gray-400 mt-2">
+                  {playerUnits.length}/{UNITS_TO_PLACE} birim yerleştirildi
+                </p>
+              )}
+            </div>
+
+            {/* Grid */}
+            <div className="flex justify-center">
+              {renderGrid()}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-4 justify-center">
+              {gameState === 'setup' && (
+                <button
+                  onClick={beginBattle}
+                  disabled={playerUnits.length !== UNITS_TO_PLACE}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-lg transition-all"
+                >
+                  Savaşa Başla
+                </button>
+              )}
+              
+              {gameState === 'playing' && turn === 'player' && selectedCell !== null && (
+                <button
+                  onClick={confirmAttack}
+                  className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg transition-all transform hover:scale-105"
+                >
+                  Saldır!
+                </button>
+              )}
+              
+              {gameState === 'gameOver' && (
+                <button
+                  onClick={startGame}
+                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg transition-all"
+                >
+                  Tekrar Oyna
+                </button>
+              )}
+              
+              <button
+                onClick={() => setGameState('menu')}
+                className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-8 rounded-lg transition-all"
+              >
+                Ana Menü
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* FHE Info */}
+        <div className="mt-8 bg-gradient-to-r from-purple-900 to-blue-900 bg-opacity-90 rounded-lg p-6 border-2 border-purple-500">
+          <h3 className="text-xl font-bold mb-3 flex items-center gap-2">
+            <EyeOff className="w-6 h-6" />
+            Zama FHE Teknolojisi
+          </h3>
+          <p className="text-gray-300 mb-2">
+            Bu oyunda birim konumları <span className="text-purple-400 font-bold">Fully Homomorphic Encryption (FHE)</span> ile korunur.
+          </p>
+          <p className="text-gray-300">
+            ✨ Ne sen düşmanın konumunu görürsün, ne düşman seninkileri, ne de sunucu! 
+            Tüm hesaplamalar şifreli veri üzerinde yapılır.
+          </p>
+          <a 
+            href="https://www.zama.ai" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="inline-block mt-4 text-purple-400 hover:text-purple-300 underline"
+          >
+            Zama hakkında daha fazla bilgi →
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default DarkForestBattle;
+
